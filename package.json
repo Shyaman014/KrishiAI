@@ -1,0 +1,22 @@
+{
+  "name": "krishiai",
+  "version": "1.0.0",
+  "description": "KrishiAI – AI-powered agricultural assistance platform (monorepo root)",
+  "private": true,
+  "scripts": {
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "dev:ai": "cd ai-service && uvicorn app.main:app --reload --port 8000",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "typecheck": "npm run typecheck:client && npm run typecheck:server",
+    "typecheck:client": "cd client && npx tsc --noEmit",
+    "typecheck:server": "cd server && npx tsc --noEmit",
+    "install:all": "cd client && npm install && cd ../server && npm install",
+    "lint:client": "cd client && npm run lint"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

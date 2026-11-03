@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Background: Soft off-white with gentle nature undertone */
+    --background: 120 10% 98%;
+    /* Foreground: Crisp dark charcoal */
+    --foreground: 150 24% 12%;
+
+    /* Card & Popover: Pure white surface */
+    --card: 0 0% 100%;
+    --card-foreground: 150 24% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 150 24% 12%;
+
+    /* Primary: Deep agricultural green */
+    --primary: 154 62% 21%;
+    --primary-foreground: 120 20% 98%;
+
+    /* Secondary: Fresh leaf green */
+    --secondary: 152 42% 38%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Muted: Soft earthy neutral */
+    --muted: 140 12% 94%;
+    --muted-foreground: 140 8% 42%;
+
+    /* Accent: Gentle sprout green highlight */
+    --accent: 142 50% 92%;
+    --accent-foreground: 154 62% 20%;
+
+    /* Semantic Tokens */
+    --destructive: 0 78% 54%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 70% 34%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 48%;
+    --warning-foreground: 0 0% 100%;
+
+    --info: 205 85% 48%;
+    --info-foreground: 0 0% 100%;
+
+    /* UI Borders & Inputs */
+    --border: 140 12% 88%;
+    --input: 140 12% 88%;
+    --ring: 154 62% 25%;
+
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    /* Background: Deep dark forest slate */
+    --background: 150 16% 7%;
+    /* Foreground: Off-white */
+    --foreground: 120 12% 96%;
+
+    /* Card & Popover */
+    --card: 150 14% 11%;
+    --card-foreground: 120 12% 96%;
+    --popover: 150 14% 11%;
+    --popover-foreground: 120 12% 96%;
+
+    /* Primary: Vibrant agricultural emerald */
+    --primary: 148 62% 44%;
+    --primary-foreground: 150 20% 8%;
+
+    /* Secondary: Fresh leaf tone */
+    --secondary: 150 36% 28%;
+    --secondary-foreground: 120 12% 96%;
+
+    /* Muted */
+    --muted: 150 12% 16%;
+    --muted-foreground: 140 8% 65%;
+
+    /* Accent */
+    --accent: 150 35% 18%;
+    --accent-foreground: 148 65% 75%;
+
+    /* Semantic Tokens */
+    --destructive: 0 68% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 65% 42%;
+    --success-foreground: 150 20% 8%;
+
+    --warning: 38 90% 50%;
+    --warning-foreground: 150 20% 8%;
+
+    --info: 205 80% 55%;
+    --info-foreground: 150 20% 8%;
+
+    /* UI Borders & Inputs */
+    --border: 150 10% 20%;
+    --input: 150 10% 20%;
+    --ring: 148 62% 44%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+}
