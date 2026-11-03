@@ -2,7 +2,7 @@ import mongoose, { Document, Schema, Model } from 'mongoose'
 import bcrypt from 'bcryptjs'
 
 export type UserRole = 'farmer' | 'admin'
-export type UserLanguage = 'en' | 'hi' | 'pa' | 'mr' | 'te' | 'ta'
+export type UserLanguage = 'en' | 'hi' | 'as' | 'pa' | 'mr' | 'te' | 'ta'
 
 export interface IRefreshToken {
   tokenHash: string
@@ -77,7 +77,7 @@ const UserSchema = new Schema<IUser>(
     },
     preferredLanguage: {
       type: String,
-      enum: ['en', 'hi', 'pa', 'mr', 'te', 'ta'],
+      enum: ['en', 'hi', 'as', 'pa', 'mr', 'te', 'ta'],
       default: 'en',
     },
     role: {

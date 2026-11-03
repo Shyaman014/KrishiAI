@@ -29,6 +29,7 @@ const envSchema = z.object({
 
   // Microservice & Integrations
   AI_SERVICE_URL: z.string().url().default('http://localhost:8000'),
+  AI_SERVICE_INTERNAL_KEY: z.string().optional().default(''),
 
   // Email Configuration (Optional - falls back to logging service)
   SMTP_HOST: z.string().optional(),

@@ -8,6 +8,7 @@ export type ActivityType =
   | 'crop_updated'
   | 'scan_submitted'
   | 'scan_completed'
+  | 'explanation_generated'
   | 'weather_viewed'
   | 'advisory_viewed'
 

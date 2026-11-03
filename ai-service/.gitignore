@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Model artifacts and local checkpoints (never commit large weights to git)
+checkpoints/*.pt
+checkpoints/*.pth
+data/
+
+# Environment
+.env
+
+# Logs
+*.log
+logs/
+
+# Jupyter
+.ipynb_checkpoints/

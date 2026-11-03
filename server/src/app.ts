@@ -4,6 +4,7 @@ import helmet from 'helmet'
 import compression from 'compression'
 import rateLimit from 'express-rate-limit'
 import cookieParser from 'cookie-parser'
+import path from 'path'
 import { env } from './config/env'
 import { requestLogger } from './middleware/requestLogger'
 import { errorHandler } from './middleware/errorHandler'
@@ -14,7 +15,7 @@ export function createApp(): Application {
   const app = express()
 
   // ---- Security Middleware ----
-  app.use(helmet())
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
   app.use(
     cors({
       origin: env.CORS_ORIGIN,
@@ -41,6 +42,9 @@ export function createApp(): Application {
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true, limit: '10mb' }))
   app.use(compression())
+
+  // ---- Static Files (Local uploads fallback) ----
+  app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')))
 
   // ---- Request Logging ----
   app.use(requestLogger)
