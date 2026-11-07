@@ -1,213 +1,547 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Bot,
   Send,
-  User,
+  User as UserIcon,
   Sparkles,
   RotateCcw,
   Lightbulb,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Copy,
+  Check,
+  Trash2,
+  Plus,
+  MessageSquare,
+  AlertCircle,
+  HelpCircle,
 } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/Card'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/Input'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/Select'
+import { LoadingState } from '@/components/ui/LoadingState'
 import { useToast } from '@/contexts/ToastContext'
-
-interface Message {
-  id: string
-  sender: 'user' | 'assistant'
-  text: string
-  time: string
-}
-
-const initialMessages: Message[] = [
-  {
-    id: 'm1',
-    sender: 'assistant',
-    text: 'Namaste Ramesh ji! I am your KrishiAI Agronomic Assistant. How can I assist your field operations today? You can ask about crop diseases, spray dosages, or fertilizer schedules.',
-    time: '10:30 AM',
-  },
-  {
-    id: 'm2',
-    sender: 'user',
-    text: 'My wheat field (Plot #4) is showing small yellow stripes on the leaves. What spray do you recommend?',
-    time: '10:32 AM',
-  },
-  {
-    id: 'm3',
-    sender: 'assistant',
-    text: 'Based on your plot location in Punjab and the recent cloudy weather, this strongly indicates Early Yellow Stripe Rust (Puccinia striiformis).\n\nRecommended Action Plan:\n1. Apply Propiconazole 25% EC (Tilt) @ 1 ml per liter of water (200 ml in 200 liters of water per acre).\n2. Optimum application window: Today between 3:30 PM and 6:00 PM when wind speed is < 8 km/h.\n3. Ensure high pressure hollow-cone nozzle is used for thorough underside leaf coverage.',
-    time: '10:32 AM',
-  },
-]
-
-const suggestedQueries = [
-  'What is the recommended Urea dose for wheat tillering?',
-  'How to prevent aphid attacks in flowering mustard organically?',
-  'What is the current Khanna Mandi rate for wheat?',
-  'Calculate water requirement for 4 acres of potatoes.',
-]
+import { useAuth } from '@/contexts/AuthContext'
+import {
+  useConversations,
+  useConversation,
+  useSendMessage,
+  useDeleteConversation,
+  IMessage,
+} from '@/hooks/useAssistant'
+import { useSpeech } from '@/hooks/useSpeech'
 
 export default function AiAssistantPage() {
   const { toast } = useToast()
-  const [messages, setMessages] = useState<Message[]>(initialMessages)
+  const { user } = useAuth()
+
+  // Default language from profile
+  const defaultLang: 'en' | 'hi' | 'as' =
+    user?.preferredLanguage === 'hi' || user?.preferredLanguage === 'as'
+      ? user.preferredLanguage
+      : 'en'
+
+  const [language, setLanguage] = useState<'en' | 'hi' | 'as'>(defaultLang)
+  const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>()
   const [inputMessage, setInputMessage] = useState('')
-  const [isTyping, setIsTyping] = useState(false)
+  const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const handleSendMessage = (textToSend?: string) => {
-    const text = textToSend || inputMessage
-    if (!text.trim()) return
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      sender: 'user',
-      text: text.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  // Speech Hook
+  const {
+    isListening,
+    startListening,
+    stopListening,
+    recognitionError,
+    isSttSupported,
+    isSpeaking,
+    speak,
+    stopSpeaking,
+    isTtsSupported,
+  } = useSpeech({
+    language,
+    onTranscript: (spokenText) => {
+      setInputMessage((prev) => (prev ? `${prev} ${spokenText}` : spokenText))
+    },
+  })
+
+  // Queries & Mutations
+  const conversationsQuery = useConversations()
+  const currentConversationQuery = useConversation(selectedConversationId)
+  const sendMessageMutation = useSendMessage()
+  const deleteConversationMutation = useDeleteConversation()
+
+  // Auto-scroll messages to bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [currentConversationQuery.data?.messages, sendMessageMutation.isPending])
+
+  // Handle microphone error toast
+  useEffect(() => {
+    if (recognitionError) {
+      toast.error(recognitionError)
     }
+  }, [recognitionError, toast])
 
-    setMessages((prev) => [...prev, userMsg])
-    if (!textToSend) setInputMessage('')
-    setIsTyping(true)
+  // Handle Send Message
+  const handleSendMessage = (textToSend?: string) => {
+    const text = (textToSend || inputMessage).trim()
+    if (!text) return
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiReply: Message = {
-        id: (Date.now() + 1).toString(),
-        sender: 'assistant',
-        text: `Here is the agronomic guidance for: "${text}".\n\nFor best yield in your regional soil conditions, maintain consistent irrigation intervals and apply balanced NPK nutrients based on your latest soil health card. Consult our Weather tab before executing chemical sprays.`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      }
-      setMessages((prev) => [...prev, aiReply])
-      setIsTyping(false)
-    }, 1000)
+    setInputMessage('')
+    setLastFailedMessage(null)
+
+    sendMessageMutation.mutate(
+      {
+        message: text,
+        conversationId: selectedConversationId,
+        language,
+      },
+      {
+        onSuccess: (data) => {
+          if (!selectedConversationId) {
+            setSelectedConversationId(data.conversationId)
+          }
+        },
+        onError: (err: unknown) => {
+          setLastFailedMessage(text)
+          const axiosErr = err as { response?: { data?: { message?: string } } }
+          const msg =
+            axiosErr.response?.data?.message || 'Failed to receive assistant reply. Please try again.'
+          toast.error(msg)
+        },
+      },
+    )
   }
 
-  const handleReset = () => {
-    setMessages(initialMessages)
-    toast.info('Chat session refreshed.')
+  // Handle Copy Message Content
+  const handleCopy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedId(id)
+    toast.success('Response copied to clipboard.')
+    setTimeout(() => setCopiedId(null), 2000)
   }
+
+  // Handle Delete Conversation
+  const handleDeleteConversation = (convId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    deleteConversationMutation.mutate(convId, {
+      onSuccess: () => {
+        if (selectedConversationId === convId) {
+          setSelectedConversationId(undefined)
+        }
+        toast.info('Conversation removed.')
+      },
+      onError: () => {
+        toast.error('Failed to delete conversation.')
+      },
+    })
+  }
+
+  // Suggested Prompts based on Language
+  const suggestedQueries =
+    language === 'hi'
+      ? [
+          'गेहूं में पीला रतुआ (Yellow Rust) के लक्षण और सही छिड़काव क्या है?',
+          'सरसों में माहू (चेपा/एफिड) का जैविक व रासायनिक नियंत्रण कैसे करें?',
+          'खन्ना और इंदौर मंडी में गेहूं व सरसों का आज का क्या भाव है?',
+          'गेहूं की फसल में कल्ले फूटते समय यूरिया की कितनी मात्रा दें?',
+        ]
+      : language === 'as'
+      ? [
+          'সৰিয়হত মোৱা পোক (Aphid) নিয়ন্ত্ৰণৰ বাবে কি দৰব ব্যৱহাৰ কৰিম?',
+          'ঘেঁহুৰ হালধীয়া ৰাষ্ট ৰোগৰ প্ৰাথমিক লক্ষণ কি কি?',
+          'বৰ্তমান চৰকাৰী সমৰ্থন মূল্য (MSP) কিমান?',
+          'মাটিৰ স্বাস্থ্য কাৰ্ডৰ মতে সাৰ প্ৰয়োগৰ সঠিক নিয়ম কি?',
+        ]
+      : [
+          'My wheat crop has yellow stripes on the leaves. What spray is recommended?',
+          'How do I organically prevent aphid attacks in flowering mustard?',
+          'What are current Khanna & Indore Mandi rates and official MSPs?',
+          'What is the recommended fertilizer schedule for wheat at 45 days?',
+        ]
+
+  const activeMessages: IMessage[] = currentConversationQuery.data?.messages || []
 
   return (
-    <div className="space-y-6 animate-fade-in pb-12 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="h-[calc(100vh-8.5rem)] flex flex-col space-y-4 animate-fade-in pb-2">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <Badge variant="default" size="sm" dot>
-              Krishi-LLM v3 (Agricultural Specialized)
+            <Badge variant="default" size="sm">
+              Multilingual Agronomic AI
+            </Badge>
+            <Badge variant="outline" size="sm" className="font-mono text-[11px]">
+              Gemini 2.5 • Grounded Agricultural KB
             </Badge>
           </div>
-          <h1 className="text-2xl font-extrabold text-foreground tracking-tight flex items-center gap-2.5">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight flex items-center gap-2">
             <Bot className="h-6 w-6 text-primary" />
-            AI Agronomic Assistant
+            KrishiAI Agricultural Assistant
           </h1>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          leftIcon={<RotateCcw className="h-4 w-4" />}
-          onClick={handleReset}
-        >
-          Reset Chat
-        </Button>
-      </div>
+        {/* Action Controls */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select
+            value={language}
+            onValueChange={(val: 'en' | 'hi' | 'as') => {
+              setLanguage(val)
+              toast.info(`Assistant language set to ${val === 'hi' ? 'हिन्दी' : val === 'as' ? 'অসমীয়া' : 'English'}.`)
+            }}
+          >
+            <SelectTrigger className="w-[125px] h-8 text-xs bg-card">
+              <SelectValue placeholder="Language" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="en">English</SelectItem>
+              <SelectItem value="hi">हिन्दी (Hindi)</SelectItem>
+              <SelectItem value="as">অসমীয়া (Assamese)</SelectItem>
+            </SelectContent>
+          </Select>
 
-      {/* Suggested Quick Queries */}
-      <div className="space-y-2">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <Lightbulb className="h-3.5 w-3.5 text-warning" />
-          Suggested Field Questions:
-        </span>
-        <div className="flex flex-wrap gap-2">
-          {suggestedQueries.map((query, i) => (
-            <button
-              key={i}
-              onClick={() => handleSendMessage(query)}
-              className="text-xs px-3 py-1.5 rounded-full bg-card border border-border hover:border-primary/40 hover:bg-muted text-foreground/80 hover:text-foreground transition-all text-left cursor-pointer"
+          {isSpeaking && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={stopSpeaking}
+              className="h-8 text-xs text-destructive border-destructive/30"
+              leftIcon={<VolumeX className="h-3.5 w-3.5" />}
             >
-              {query}
-            </button>
-          ))}
+              Stop Voice
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSelectedConversationId(undefined)
+              setSidebarOpen(false)
+              toast.info('Started a new consultation.')
+            }}
+            className="h-8 text-xs shadow-sm bg-card"
+            leftIcon={<Plus className="h-3.5 w-3.5" />}
+          >
+            New Chat
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="h-8 text-xs shadow-sm bg-card md:hidden"
+            leftIcon={<MessageSquare className="h-3.5 w-3.5" />}
+          >
+            Chats ({conversationsQuery.data?.items.length || 0})
+          </Button>
         </div>
       </div>
 
-      {/* Chat Messages Card */}
-      <Card className="min-h-[480px] flex flex-col justify-between shadow-premium border-primary/20">
-        <CardContent className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 max-h-[500px]">
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={`flex items-start gap-3 ${
-                m.sender === 'user' ? 'flex-row-reverse' : ''
-              }`}
+      {/* Chat Workspace (Sidebar + Main Chat) */}
+      <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
+        {/* Sidebar: Past Conversations */}
+        <Card
+          className={`w-72 shrink-0 border-border flex flex-col md:flex ${
+            sidebarOpen
+              ? 'fixed inset-y-0 left-0 z-50 w-72 bg-card p-4 shadow-xl'
+              : 'hidden md:flex'
+          }`}
+        >
+          <CardHeader className="p-3 border-b border-border/50 flex flex-row items-center justify-between">
+            <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground font-bold flex items-center gap-1.5">
+              <MessageSquare className="h-3.5 w-3.5 text-primary" /> Past Consultations
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSelectedConversationId(undefined)
+                setSidebarOpen(false)
+              }}
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+              title="Start New Chat"
             >
-              {/* Avatar */}
-              <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
-                  m.sender === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-primary/20 text-primary border border-primary/30'
-                }`}
-              >
-                {m.sender === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-              </div>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </CardHeader>
 
-              {/* Message Bubble */}
+          <CardContent className="p-2 flex-1 overflow-y-auto space-y-1 text-xs">
+            {conversationsQuery.isLoading && (
+              <div className="p-4 text-center">
+                <LoadingState message="Loading..." />
+              </div>
+            )}
+
+            {conversationsQuery.data && conversationsQuery.data.items.length === 0 && (
+              <div className="p-6 text-center text-muted-foreground text-xs space-y-1">
+                <HelpCircle className="h-6 w-6 text-muted-foreground mx-auto mb-1 opacity-50" />
+                <p>No prior chats.</p>
+                <p className="text-[11px]">Ask a question to start your first session.</p>
+              </div>
+            )}
+
+            {conversationsQuery.data?.items.map((conv) => (
               <div
-                className={`max-w-[80%] rounded-2xl p-4 text-xs sm:text-sm leading-relaxed whitespace-pre-line shadow-subtle ${
-                  m.sender === 'user'
-                    ? 'bg-primary text-primary-foreground rounded-tr-none'
-                    : 'bg-muted/50 text-foreground border border-border/80 rounded-tl-none'
+                key={conv.id}
+                onClick={() => {
+                  setSelectedConversationId(conv.id)
+                  setSidebarOpen(false)
+                }}
+                className={`p-2.5 rounded-xl cursor-pointer flex items-center justify-between group transition-colors ${
+                  selectedConversationId === conv.id
+                    ? 'bg-primary/10 text-primary font-semibold'
+                    : 'hover:bg-muted/50 text-foreground'
                 }`}
               >
-                {m.text}
-                <span
-                  className={`block text-[10px] mt-1.5 ${
-                    m.sender === 'user' ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                <div className="min-w-0 pr-2">
+                  <span className="block truncate text-xs">{conv.title}</span>
+                  <span className="text-[10px] text-muted-foreground block font-mono">
+                    {conv.messageCount} messages • {conv.language.toUpperCase()}
+                  </span>
+                </div>
+
+                <button
+                  onClick={(e) => handleDeleteConversation(conv.id, e)}
+                  className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-destructive rounded transition-opacity"
+                  title="Delete Conversation"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Main Conversation Window */}
+        <Card className="flex-1 flex flex-col border-border overflow-hidden bg-card">
+          {/* Messages Scroll Area */}
+          <div className="flex-1 p-4 overflow-y-auto space-y-4">
+            {/* Initial Welcome & Suggested Chips when empty */}
+            {activeMessages.length === 0 && (
+              <div className="max-w-2xl mx-auto py-8 text-center space-y-6 animate-fade-in">
+                <div className="h-16 w-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-sm">
+                  <Bot className="h-9 w-9" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-foreground">
+                    {language === 'hi'
+                      ? 'नमस्ते! मैं आपका कृषि सलाहकार हूँ।'
+                      : language === 'as'
+                      ? 'নমস্কাৰ! মই আপোনাৰ KrishiAI কৃষি সহায়ক।'
+                      : 'Namaste! I am your KrishiAI Agricultural Advisor.'}
+                  </h3>
+                  <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+                    Ask me about leaf symptoms, crop disease management, soil nutrients, weather advisories,
+                    or live Mandi prices. You can type or tap the microphone to speak.
+                  </p>
+                </div>
+
+                {/* Suggested Prompt Chips */}
+                <div className="space-y-2">
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
+                    Suggested Questions
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
+                    {suggestedQueries.map((query, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSendMessage(query)}
+                        className="p-3 rounded-xl border border-border/80 bg-background/50 hover:bg-muted/50 hover:border-primary/50 text-xs text-foreground transition-all flex items-start gap-2 shadow-sm text-left"
+                      >
+                        <Lightbulb className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                        <span className="line-clamp-2 leading-relaxed">{query}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Render Conversation Messages */}
+            {activeMessages.map((msg: IMessage, index: number) => {
+              const isAssistant = msg.sender === 'assistant'
+              const msgId = msg._id || String(index)
+
+              return (
+                <div
+                  key={msgId}
+                  className={`flex gap-3 max-w-2xl animate-fade-in ${
+                    isAssistant ? 'mr-auto' : 'ml-auto flex-row-reverse'
                   }`}
                 >
-                  {m.time}
-                </span>
+                  {/* Avatar */}
+                  <div
+                    className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold shadow-sm ${
+                      isAssistant
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-foreground'
+                    }`}
+                  >
+                    {isAssistant ? <Bot className="h-4 w-4" /> : <UserIcon className="h-4 w-4" />}
+                  </div>
+
+                  {/* Bubble */}
+                  <div
+                    className={`p-3.5 rounded-2xl text-xs space-y-2 leading-relaxed ${
+                      isAssistant
+                        ? 'bg-muted/40 border border-border/70 text-foreground'
+                        : 'bg-primary text-primary-foreground font-medium rounded-tr-none'
+                    }`}
+                  >
+                    <p className="whitespace-pre-line">{msg.text}</p>
+
+                    {/* Metadata & Actions for Assistant */}
+                    {isAssistant && (
+                      <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[10px] text-muted-foreground">
+                        <span>
+                          {new Date(msg.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+
+                        <div className="flex items-center gap-1.5">
+                          {isTtsSupported && (
+                            <button
+                              onClick={() => speak(msg.text, language)}
+                              className="p-1 hover:text-primary rounded transition-colors"
+                              title="Listen to audio"
+                            >
+                              <Volume2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => handleCopy(msgId, msg.text)}
+                            className="p-1 hover:text-primary rounded transition-colors"
+                            title="Copy response"
+                          >
+                            {copiedId === msgId ? (
+                              <Check className="h-3.5 w-3.5 text-success" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Pending Typing Indicator */}
+            {sendMessageMutation.isPending && (
+              <div className="flex gap-3 max-w-xl animate-fade-in">
+                <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0">
+                  <Bot className="h-4 w-4" />
+                </div>
+                <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/70 text-xs flex items-center gap-2 text-muted-foreground">
+                  <Sparkles className="h-3.5 w-3.5 text-primary animate-spin" />
+                  <span>KrishiAI is formulating verified agronomic guidance...</span>
+                </div>
               </div>
-            </div>
-          ))}
+            )}
 
-          {isTyping && (
-            <div className="flex items-center gap-3 text-xs text-muted-foreground italic pl-11">
-              <Sparkles className="h-3.5 w-3.5 text-primary animate-spin" />
-              <span>KrishiAI is compiling agronomic recommendation...</span>
-            </div>
-          )}
-        </CardContent>
+            {/* Retry Button on Error */}
+            {lastFailedMessage && (
+              <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-xs text-destructive flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>Failed to deliver message. Tap to retry.</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSendMessage(lastFailedMessage)}
+                  className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+                  leftIcon={<RotateCcw className="h-3 w-3" />}
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
 
-        {/* Input Bar */}
-        <div className="p-4 border-t border-border bg-card rounded-b-2xl">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              handleSendMessage()
-            }}
-            className="flex items-center gap-2"
-          >
-            <input
-              type="text"
-              placeholder="Ask about crop diseases, dosage, sowing dates, soil health..."
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              className="flex-1 h-11 px-4 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
-            />
-            <Button
-              type="submit"
-              size="lg"
-              leftIcon={<Send className="h-4 w-4" />}
-              disabled={!inputMessage.trim()}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Bar */}
+          <div className="p-3 border-t border-border bg-background/50">
+            {isListening && (
+              <div className="mb-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary text-xs flex items-center justify-between animate-pulse">
+                <span className="flex items-center gap-2">
+                  <Mic className="h-3.5 w-3.5 animate-bounce" /> Listening... Speak in {language === 'hi' ? 'Hindi' : language === 'as' ? 'Assamese' : 'English'}
+                </span>
+                <button onClick={stopListening} className="underline text-[11px] font-semibold">
+                  Stop Recording
+                </button>
+              </div>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleSendMessage()
+              }}
+              className="flex items-center gap-2"
             >
-              Send
-            </Button>
-          </form>
-        </div>
-      </Card>
+              <div className="relative flex-1">
+                <Input
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  placeholder={
+                    language === 'hi'
+                      ? 'फसल की बीमारी, खाद, मौसम या मंडी भाव के बारे में पूछें...'
+                      : language === 'as'
+                      ? 'শস্যৰ ৰোগ, সাৰ বা মণ্ডীৰ দামৰ বিষয়ে সোধক...'
+                      : 'Ask about crop symptoms, sprays, soil nutrients, or mandi prices...'
+                  }
+                  disabled={sendMessageMutation.isPending}
+                  className="pr-10 h-10 text-xs bg-background"
+                />
+              </div>
+
+              {/* Voice Microphone Toggle */}
+              {isSttSupported && (
+                <Button
+                  type="button"
+                  variant={isListening ? 'destructive' : 'outline'}
+                  size="sm"
+                  onClick={isListening ? stopListening : startListening}
+                  className={`h-10 w-10 p-0 rounded-xl shrink-0 transition-all ${
+                    isListening ? 'ring-2 ring-destructive animate-pulse' : ''
+                  }`}
+                  title={isListening ? 'Stop listening' : 'Speak your question'}
+                >
+                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </Button>
+              )}
+
+              {/* Send Button */}
+              <Button
+                type="submit"
+                disabled={sendMessageMutation.isPending || !inputMessage.trim()}
+                className="h-10 px-4 rounded-xl shadow-premium shrink-0"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </form>
+          </div>
+        </Card>
+      </div>
     </div>
   )
 }
-

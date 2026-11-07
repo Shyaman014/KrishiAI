@@ -3,7 +3,7 @@ import apiClient, { setAccessToken } from '@/lib/api'
 import { useToast } from './ToastContext'
 
 export type UserRole = 'farmer' | 'admin'
-export type UserLanguage = 'en' | 'hi' | 'pa' | 'mr' | 'te' | 'ta'
+export type UserLanguage = 'en' | 'hi' | 'as' | 'pa' | 'mr' | 'te' | 'ta'
 
 export interface User {
   _id: string

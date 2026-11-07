@@ -8,6 +8,7 @@ import recommendationFeedbackRoutes from './recommendationFeedbackRoutes'
 import weatherRoutes from './weatherRoutes'
 import cropRecommendationRoutes from './cropRecommendationRoutes'
 import marketRoutes from './marketRoutes'
+import assistantRoutes from './assistantRoutes'
 
 const router = Router()
 
@@ -20,5 +21,6 @@ router.use('/recommendations', recommendationFeedbackRoutes)
 router.use('/weather', weatherRoutes)
 router.use('/crops', cropRecommendationRoutes)
 router.use('/markets', marketRoutes)
+router.use('/assistant', assistantRoutes)
 
 export default router

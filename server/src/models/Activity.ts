@@ -17,6 +17,7 @@ export type ActivityType =
   | 'price_alert_triggered'
   | 'price_alert_deleted'
   | 'market_viewed'
+  | 'assistant_query'
 
 export interface IActivity extends Document {
   userId: mongoose.Types.ObjectId
