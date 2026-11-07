@@ -18,6 +18,11 @@ import {
 } from 'lucide-react'
 import apiClient from '@/lib/api'
 import { DiseaseAdvisoryReport, ExplanationPayload } from '@/components/scans/DiseaseAdvisoryReport'
+import {
+  TreatmentRecommendationPanel,
+  RecommendationPayload,
+  RecommendationFeedbackSubmit,
+} from '@/components/scans/TreatmentRecommendationPanel'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -86,6 +91,85 @@ export default function ScanHistoryPage() {
   const [page, setPage] = useState(1)
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false)
   const [showFullAdvisory, setShowFullAdvisory] = useState(false)
+
+  // Phase 8: Recommendations state
+  const [recommendation, setRecommendation] = useState<RecommendationPayload | null>(null)
+  const [hasRecommendation, setHasRecommendation] = useState(false)
+  const [isGeneratingRecommendation, setIsGeneratingRecommendation] = useState(false)
+  const [recommendationError, setRecommendationError] = useState<string | null>(null)
+  const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false)
+  const [recommendationLanguage, setRecommendationLanguage] = useState<'en' | 'hi' | 'as'>('en')
+
+  const fetchScanRecommendation = async (scanId: string) => {
+    try {
+      const res = await apiClient.get(`/api/scans/${scanId}/recommendations`)
+      if (res.data?.data?.hasRecommendation) {
+        setRecommendation(res.data.data.recommendation)
+        setHasRecommendation(true)
+      } else {
+        setRecommendation(null)
+        setHasRecommendation(false)
+      }
+    } catch {
+      setRecommendation(null)
+      setHasRecommendation(false)
+    }
+  }
+
+  const handleSelectScan = (scan: ScanItem) => {
+    setSelectedScan(scan)
+    if (scan.status === 'completed') {
+      void fetchScanRecommendation(scan.id)
+    } else {
+      setRecommendation(null)
+      setHasRecommendation(false)
+    }
+  }
+
+  const handleGenerateRecommendationsForScan = async (language: 'en' | 'hi' | 'as') => {
+    if (!selectedScan?.id) return
+    setIsGeneratingRecommendation(true)
+    setRecommendationError(null)
+    try {
+      const res = await apiClient.post(
+        `/api/scans/${selectedScan.id}/recommendations/generate`,
+        { language, regenerate: hasRecommendation },
+      )
+      const rec: RecommendationPayload = res.data?.data?.recommendation
+      setRecommendation(rec)
+      setHasRecommendation(true)
+      setRecommendationLanguage(language)
+      toast.success('Treatment recommendations generated successfully!')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string }
+      const msg = e?.response?.data?.message || 'Failed to generate recommendations.'
+      setRecommendationError(msg)
+      toast.error(msg)
+    } finally {
+      setIsGeneratingRecommendation(false)
+    }
+  }
+
+  const handleFeedbackSubmit = async (
+    recommendationId: string,
+    feedbackData: RecommendationFeedbackSubmit,
+  ) => {
+    setIsFeedbackSubmitting(true)
+    try {
+      const res = await apiClient.post(
+        `/api/recommendations/${recommendationId}/feedback`,
+        feedbackData,
+      )
+      const updated: RecommendationPayload = res.data?.data?.recommendation
+      setRecommendation(updated)
+      toast.success('Feedback submitted. Thank you!')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string }
+      toast.error(e?.response?.data?.message || 'Failed to submit feedback.')
+    } finally {
+      setIsFeedbackSubmitting(false)
+    }
+  }
 
   const handleGenerateExplanationForScan = async (language: 'en' | 'hi' | 'as') => {
     if (!selectedScan?.id) return
@@ -335,7 +419,7 @@ export default function ScanHistoryPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setSelectedScan(scan)}
+                      onClick={() => handleSelectScan(scan)}
                       leftIcon={<Eye className="h-3.5 w-3.5" />}
                     >
                       Details
@@ -409,6 +493,8 @@ export default function ScanHistoryPage() {
             if (!open) {
               setSelectedScan(null)
               setShowFullAdvisory(false)
+              setRecommendation(null)
+              setHasRecommendation(false)
             }
           }}
         >
@@ -443,7 +529,7 @@ export default function ScanHistoryPage() {
             </DialogHeader>
 
             {showFullAdvisory ? (
-              <div className="py-2">
+              <div className="py-2 space-y-6">
                 <DiseaseAdvisoryReport
                   cropName={selectedScan.predictedCrop || selectedScan.cropName}
                   diseaseName={selectedScan.predictedDisease || selectedScan.diseaseName}
@@ -456,6 +542,22 @@ export default function ScanHistoryPage() {
                   explanation={selectedScan.explanation}
                   onGenerateExplanation={handleGenerateExplanationForScan}
                   isGenerating={isGeneratingExplanation}
+                />
+
+                {/* Phase 8: Treatment Recommendations in History Modal */}
+                <TreatmentRecommendationPanel
+                  recommendation={recommendation}
+                  hasRecommendation={hasRecommendation}
+                  isGenerating={isGeneratingRecommendation}
+                  isGeneratingError={recommendationError}
+                  onGenerate={handleGenerateRecommendationsForScan}
+                  onFeedbackSubmit={handleFeedbackSubmit}
+                  isFeedbackSubmitting={isFeedbackSubmitting}
+                  scanStatus={selectedScan.status}
+                  confidence={selectedScan.confidence}
+                  isHealthy={selectedScan.isHealthy}
+                  language={recommendationLanguage}
+                  onLanguageChange={setRecommendationLanguage}
                 />
               </div>
             ) : (
@@ -579,6 +681,8 @@ export default function ScanHistoryPage() {
                   onClick={() => {
                     setSelectedScan(null)
                     setShowFullAdvisory(false)
+                    setRecommendation(null)
+                    setHasRecommendation(false)
                   }}
                 >
                   Close
@@ -588,6 +692,8 @@ export default function ScanHistoryPage() {
                   onClick={() => {
                     setSelectedScan(null)
                     setShowFullAdvisory(false)
+                    setRecommendation(null)
+                    setHasRecommendation(false)
                     navigate('/app/scanner')
                   }}
                   leftIcon={<ScanLine className="h-4 w-4" />}

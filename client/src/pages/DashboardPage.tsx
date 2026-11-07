@@ -22,7 +22,6 @@ import {
   TrendingUp,
   MapPin,
   RefreshCw,
-  Info,
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts'
 import apiClient from '@/lib/api'
@@ -171,6 +170,19 @@ export default function DashboardPage() {
       const res = await apiClient.get('/api/dashboard/activity?limit=6')
       return res.data.data
     },
+  })
+
+  // 5. Fetch Live Micro-Climate & Agro-Advisory
+  const {
+    data: weatherData,
+    isLoading: isLoadingWeather,
+  } = useQuery({
+    queryKey: ['dashboard-weather'],
+    queryFn: async () => {
+      const res = await apiClient.get('/api/weather/advisory')
+      return res.data?.data
+    },
+    staleTime: 5 * 60 * 1000,
   })
 
   // Format current date
@@ -530,7 +542,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Right: Weather Widget Foundation */}
+        {/* Right: Weather Telemetry Widget */}
         <Card className="shadow-subtle flex flex-col justify-between">
           <div>
             <CardHeader className="pb-3">
@@ -538,61 +550,106 @@ export default function DashboardPage() {
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Regional Weather
                 </span>
-                <Badge variant="outline" size="sm" className="text-[10px]">
-                  Phase 9 Foundation
+                <Badge variant="success" size="sm" className="text-[10px]">
+                  Live Telemetry
                 </Badge>
               </div>
               <CardTitle className="text-lg flex items-center gap-2">
                 <CloudSun className="h-5 w-5 text-amber-500" />
-                Micro-Climate Interface
+                Micro-Climate Telemetry
               </CardTitle>
               <CardDescription>
-                Dedicated farm telemetry and localized forecast module
+                Hyper-local farm weather and spray window monitoring
               </CardDescription>
             </CardHeader>
 
             <CardContent className="space-y-4">
-              {/* Weather Data Display Panel */}
-              <div className="p-4 rounded-2xl bg-secondary/5 border border-secondary/20 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <MapPin className="h-3.5 w-3.5 text-primary" />
-                    <span>Regional Farm Grid</span>
-                  </div>
-                  <span className="text-xs font-semibold text-foreground">Partly Sunny</span>
+              {isLoadingWeather ? (
+                <div className="space-y-3 py-2">
+                  <Skeleton className="h-28 w-full rounded-2xl" />
+                  <Skeleton className="h-12 w-full rounded-xl" />
                 </div>
+              ) : weatherData?.current ? (
+                <>
+                  {/* Weather Data Display Panel */}
+                  <div className="p-4 rounded-2xl bg-secondary/5 border border-secondary/20 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5 text-primary" />
+                        <span className="font-semibold text-foreground">
+                          {weatherData.current.location.name}
+                        </span>
+                      </div>
+                      <Badge variant="outline" size="sm" className="text-[11px] capitalize">
+                        {weatherData.current.current.condition}
+                      </Badge>
+                    </div>
 
-                <div className="flex items-baseline justify-between">
-                  <span className="text-3xl font-extrabold text-foreground">27°C</span>
-                  <span className="text-xs text-muted-foreground">Day High 29° • Low 18°</span>
+                    <div className="flex items-baseline justify-between">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-extrabold text-foreground">
+                          {weatherData.current.current.temp}°C
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Feels like {weatherData.current.current.feelsLike}°C
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        High {weatherData.current.current.tempMax}° • Low {weatherData.current.current.tempMin}°
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/50 text-center">
+                      <div className="p-2 rounded-xl bg-card border border-border/40">
+                        <Droplets className="h-3.5 w-3.5 text-blue-500 mx-auto mb-1" />
+                        <span className="text-[10px] text-muted-foreground block">Humidity</span>
+                        <span className="text-xs font-bold text-foreground">
+                          {weatherData.current.current.humidity}%
+                        </span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-card border border-border/40">
+                        <Wind className="h-3.5 w-3.5 text-teal-500 mx-auto mb-1" />
+                        <span className="text-[10px] text-muted-foreground block">Wind</span>
+                        <span className="text-xs font-bold text-foreground">
+                          {weatherData.current.current.windSpeed} km/h
+                        </span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-card border border-border/40">
+                        <CloudSun className="h-3.5 w-3.5 text-amber-500 mx-auto mb-1" />
+                        <span className="text-[10px] text-muted-foreground block">Rain Chance</span>
+                        <span className="text-xs font-bold text-foreground">
+                          {weatherData.forecast?.daily?.[0]?.maxPop ?? 0}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Active Alert or Spray Advisory Snippet */}
+                  {weatherData.advisory?.alerts && weatherData.advisory.alerts.length > 0 ? (
+                    <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                      <div>
+                        <strong className="block font-bold">{weatherData.advisory.alerts[0].title}</strong>
+                        <p className="text-[11px] opacity-90">{weatherData.advisory.alerts[0].actionableGuidance}</p>
+                      </div>
+                    </div>
+                  ) : weatherData.advisory?.sprayWindow ? (
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/15 text-xs">
+                      <span className="text-muted-foreground">Spray Window Today:</span>
+                      <Badge
+                        variant={weatherData.advisory.sprayWindow.isFavorableToday ? 'success' : 'warning'}
+                        size="sm"
+                      >
+                        {weatherData.advisory.sprayWindow.statusLabel}
+                      </Badge>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="p-4 text-center text-xs text-muted-foreground">
+                  Weather telemetry unavailable.
                 </div>
-
-                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/50 text-center">
-                  <div className="p-2 rounded-xl bg-card border border-border/40">
-                    <Droplets className="h-3.5 w-3.5 text-blue-500 mx-auto mb-1" />
-                    <span className="text-[10px] text-muted-foreground block">Humidity</span>
-                    <span className="text-xs font-bold text-foreground">54%</span>
-                  </div>
-                  <div className="p-2 rounded-xl bg-card border border-border/40">
-                    <Wind className="h-3.5 w-3.5 text-teal-500 mx-auto mb-1" />
-                    <span className="text-[10px] text-muted-foreground block">Wind</span>
-                    <span className="text-xs font-bold text-foreground">7 km/h</span>
-                  </div>
-                  <div className="p-2 rounded-xl bg-card border border-border/40">
-                    <CloudSun className="h-3.5 w-3.5 text-amber-500 mx-auto mb-1" />
-                    <span className="text-[10px] text-muted-foreground block">Rainfall</span>
-                    <span className="text-xs font-bold text-foreground">0.0 mm</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Informational Integration Note */}
-              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-primary/5 border border-primary/15 text-xs text-muted-foreground">
-                <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                <p className="leading-relaxed">
-                  Real-time satellite and IMD weather API integrations will be fully connected in Phase 9.
-                </p>
-              </div>
+              )}
             </CardContent>
           </div>
 

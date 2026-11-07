@@ -9,8 +9,14 @@ export type ActivityType =
   | 'scan_submitted'
   | 'scan_completed'
   | 'explanation_generated'
+  | 'recommendation_generated'
   | 'weather_viewed'
   | 'advisory_viewed'
+  | 'crop_recommendation_generated'
+  | 'price_alert_created'
+  | 'price_alert_triggered'
+  | 'price_alert_deleted'
+  | 'market_viewed'
 
 export interface IActivity extends Document {
   userId: mongoose.Types.ObjectId

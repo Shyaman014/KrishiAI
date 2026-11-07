@@ -14,6 +14,7 @@ from app.routers import health as health_router
 from app.routers import predict as predict_router
 from app.routers import model_info as model_info_router
 from app.routers import explain as explain_router
+from app.routers import crop_recommend as crop_recommend_router
 from app.services.predictor import CropDiseasePredictor
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(predict_router.router, prefix="/api/v1")
     app.include_router(model_info_router.router, prefix="/api/v1")
     app.include_router(explain_router.router, prefix="/api/v1")
+    app.include_router(crop_recommend_router.router, prefix="/api/v1")
 
     # ---- Root ----
     @app.get("/", tags=["Root"])

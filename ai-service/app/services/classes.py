@@ -199,4 +199,3 @@ CLASS_NAMES: list[str] = [cls["raw_class"] for cls in PLANT_VILLAGE_CLASSES]
 CLASS_MAP: dict[int, ClassMetadata] = {cls["id"]: cls for cls in PLANT_VILLAGE_CLASSES}
 RAW_TO_METADATA: dict[str, ClassMetadata] = {cls["raw_class"]: cls for cls in PLANT_VILLAGE_CLASSES}
 NUM_CLASSES: int = len(PLANT_VILLAGE_CLASSES)
-

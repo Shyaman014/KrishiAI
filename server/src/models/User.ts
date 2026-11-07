@@ -4,6 +4,16 @@ import bcrypt from 'bcryptjs'
 export type UserRole = 'farmer' | 'admin'
 export type UserLanguage = 'en' | 'hi' | 'as' | 'pa' | 'mr' | 'te' | 'ta'
 
+export interface IUserLocationPreference {
+  cityName?: string
+  state?: string
+  country?: string
+  latitude?: number
+  longitude?: number
+  source?: 'gps' | 'manual'
+  updatedAt?: Date
+}
+
 export interface IRefreshToken {
   tokenHash: string
   family: string
@@ -18,6 +28,7 @@ export interface IUser extends Document {
   password?: string
   profileImage?: string
   preferredLanguage: UserLanguage
+  locationPreference?: IUserLocationPreference
   role: UserRole
   isVerified: boolean
   verificationToken?: string
@@ -79,6 +90,15 @@ const UserSchema = new Schema<IUser>(
       type: String,
       enum: ['en', 'hi', 'as', 'pa', 'mr', 'te', 'ta'],
       default: 'en',
+    },
+    locationPreference: {
+      cityName: { type: String, trim: true },
+      state: { type: String, trim: true },
+      country: { type: String, trim: true, default: 'IN' },
+      latitude: { type: Number },
+      longitude: { type: Number },
+      source: { type: String, enum: ['gps', 'manual'], default: 'manual' },
+      updatedAt: { type: Date, default: Date.now },
     },
     role: {
       type: String,

@@ -16,6 +16,11 @@ import apiClient from '@/lib/api'
 import { useCamera } from '@/hooks/useCamera'
 import { validateCropImage, ImageValidationResult } from '@/lib/imageValidation'
 import { DiseaseAdvisoryReport, ExplanationPayload } from '@/components/scans/DiseaseAdvisoryReport'
+import {
+  TreatmentRecommendationPanel,
+  RecommendationPayload,
+  RecommendationFeedbackSubmit,
+} from '@/components/scans/TreatmentRecommendationPanel'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -114,6 +119,14 @@ export default function CropDiseaseScannerPage() {
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
+  // Phase 8: Recommendation state
+  const [recommendation, setRecommendation] = useState<RecommendationPayload | null>(null)
+  const [hasRecommendation, setHasRecommendation] = useState(false)
+  const [isGeneratingRecommendation, setIsGeneratingRecommendation] = useState(false)
+  const [recommendationError, setRecommendationError] = useState<string | null>(null)
+  const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false)
+  const [recommendationLanguage, setRecommendationLanguage] = useState<'en' | 'hi' | 'as'>('en')
+
   // Trigger Phase 6 PyTorch AI Analysis
   const triggerAnalysis = async (scanId: string) => {
     setIsAnalyzing(true)
@@ -127,6 +140,8 @@ export default function CropDiseaseScannerPage() {
       } else {
         toast.warning(`AI Detected: ${analyzed?.diseaseName || 'Crop Disease'}`)
       }
+      // After analysis, check for existing recommendations
+      void fetchRecommendation(scanId)
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } }; message?: string }
       const msg = e?.response?.data?.message || 'AI vision analysis failed. Please try again.'
@@ -159,6 +174,68 @@ export default function CropDiseaseScannerPage() {
       toast.error(msg)
     } finally {
       setIsGeneratingExplanation(false)
+    }
+  }
+
+  // Trigger Phase 8 Recommendation Generation
+  const triggerRecommendations = async (language: 'en' | 'hi' | 'as') => {
+    if (!submittedScan?.id) return
+    setIsGeneratingRecommendation(true)
+    setRecommendationError(null)
+    try {
+      const res = await apiClient.post(
+        `/api/scans/${submittedScan.id}/recommendations/generate`,
+        { language, regenerate: hasRecommendation },
+      )
+      const rec: RecommendationPayload = res.data?.data?.recommendation
+      setRecommendation(rec)
+      setHasRecommendation(true)
+      setRecommendationLanguage(language)
+      toast.success('Treatment recommendations generated successfully!')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string }
+      const msg = e?.response?.data?.message || 'Failed to generate recommendations.'
+      setRecommendationError(msg)
+      toast.error(msg)
+    } finally {
+      setIsGeneratingRecommendation(false)
+    }
+  }
+
+  // Fetch existing recommendation for a scan (after analysis)
+  const fetchRecommendation = async (scanId: string) => {
+    try {
+      const res = await apiClient.get(`/api/scans/${scanId}/recommendations`)
+      if (res.data?.data?.hasRecommendation) {
+        setRecommendation(res.data.data.recommendation)
+        setHasRecommendation(true)
+      } else {
+        setHasRecommendation(false)
+      }
+    } catch {
+      // Non-critical; panel will show generate button
+    }
+  }
+
+  // Submit farmer feedback on recommendation
+  const handleFeedbackSubmit = async (
+    recommendationId: string,
+    feedbackData: RecommendationFeedbackSubmit,
+  ) => {
+    setIsFeedbackSubmitting(true)
+    try {
+      const res = await apiClient.post(
+        `/api/recommendations/${recommendationId}/feedback`,
+        feedbackData,
+      )
+      const updated: RecommendationPayload = res.data?.data?.recommendation
+      setRecommendation(updated)
+      toast.success('Feedback submitted. Thank you!')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string }
+      toast.error(e?.response?.data?.message || 'Failed to submit feedback.')
+    } finally {
+      setIsFeedbackSubmitting(false)
     }
   }
 
@@ -410,12 +487,31 @@ export default function CropDiseaseScannerPage() {
                   isGenerating={isGeneratingExplanation}
                 />
 
+                {/* Phase 8: Treatment Recommendations */}
+                <TreatmentRecommendationPanel
+                  recommendation={recommendation}
+                  hasRecommendation={hasRecommendation}
+                  isGenerating={isGeneratingRecommendation}
+                  isGeneratingError={recommendationError}
+                  onGenerate={triggerRecommendations}
+                  onFeedbackSubmit={handleFeedbackSubmit}
+                  isFeedbackSubmitting={isFeedbackSubmitting}
+                  scanStatus={submittedScan.status}
+                  confidence={submittedScan.confidence ?? 0}
+                  isHealthy={submittedScan.isHealthy}
+                  language={recommendationLanguage}
+                  onLanguageChange={setRecommendationLanguage}
+                />
+
                 {/* Bottom Navigation Toolbar */}
                 <div className="flex items-center justify-between flex-wrap gap-3 pt-4 border-t border-border">
                   <Button
                     variant="outline"
                     onClick={() => {
                       setSubmittedScan(null)
+                      setRecommendation(null)
+                      setHasRecommendation(false)
+                      setRecommendationError(null)
                       handleReset()
                     }}
                     leftIcon={<RefreshCw className="h-4 w-4" />}

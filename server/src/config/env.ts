@@ -42,6 +42,14 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
+
+  // OpenWeather API (Optional - falls back to realistic agro-weather engine)
+  OPENWEATHER_API_KEY: z.string().optional(),
+  WEATHER_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
+
+  // Agmarknet / data.gov.in Agricultural Market API (Optional - falls back to Agmarknet Bulletin Archive)
+  DATA_GOV_IN_API_KEY: z.string().optional(),
+  MARKET_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
 })
 
 const parsed = envSchema.safeParse(process.env)
