@@ -14,6 +14,7 @@ import {
 } from './types'
 import { MarketPriceAlert } from '../../models/MarketPriceAlert'
 import { Activity } from '../../models/Activity'
+import { NotificationService } from '../notificationService'
 import logger from '../../utils/logger'
 
 export interface PriceFilterOptions {
@@ -441,6 +442,22 @@ export class MarketDataService {
               description: `Mandi price for ${alert.commodity} at ${match.market} reached ₹${match.modalPrice}/Qtl (Target: ₹${alert.targetPrice}/Qtl)`,
               metadata: {
                 alertId: alert._id.toString(),
+                commodity: alert.commodity,
+                targetPrice: alert.targetPrice,
+                modalPrice: match.modalPrice,
+                market: match.market,
+              },
+            })
+
+            // Trigger notification
+            void NotificationService.createNotification({
+              userId: alert.userId,
+              type: 'price_target_reached',
+              title: `Price Target Reached: ${alert.commodity}`,
+              message: `Mandi price for ${alert.commodity} at ${match.market} reached ₹${match.modalPrice}/Qtl (Target: ₹${alert.targetPrice}/Qtl).`,
+              relatedResourceId: alert._id.toString(),
+              resourceType: 'market',
+              metadata: {
                 commodity: alert.commodity,
                 targetPrice: alert.targetPrice,
                 modalPrice: match.modalPrice,

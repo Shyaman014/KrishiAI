@@ -5,6 +5,7 @@ import { Scan } from '../models/Scan'
 import { Recommendation } from '../models/Recommendation'
 import { User } from '../models/User'
 import { Activity } from '../models/Activity'
+import { NotificationService } from '../services/notificationService'
 import { TreatmentRecommendationService } from '../services/recommendations/TreatmentRecommendationService'
 import {
   generateRecommendationSchema,
@@ -164,7 +165,7 @@ export const generateRecommendations = async (
       throw serviceErr
     }
 
-    // Log activity (non-blocking)
+    // Log activity & notification (non-blocking)
     try {
       await Activity.create({
         userId: new mongoose.Types.ObjectId(userId),
@@ -180,8 +181,24 @@ export const generateRecommendations = async (
           cached,
         },
       })
+
+      if (!cached) {
+        void NotificationService.createNotification({
+          userId,
+          type: 'farming_advisory',
+          title: `Treatment Advisory: ${scan.cropName || recommendation.cropName}`,
+          message: `Integrated pest management & remedy guidance prepared for ${recommendation.diseaseName}.`,
+          relatedResourceId: recommendation._id.toString(),
+          resourceType: 'advisory',
+          metadata: {
+            scanId: scan._id.toString(),
+            recommendationId: recommendation._id.toString(),
+            diseaseName: recommendation.diseaseName,
+          },
+        })
+      }
     } catch (actErr) {
-      logger.error('Failed to log recommendation_generated activity', actErr)
+      logger.error('Failed to log recommendation_generated activity or notification', actErr)
     }
 
     logger.info(

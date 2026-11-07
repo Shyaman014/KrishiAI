@@ -17,6 +17,8 @@ import CropRecommendationsPage from '@/pages/CropRecommendationsPage'
 import MarketPricesPage from '@/pages/MarketPricesPage'
 import AiAssistantPage from '@/pages/AiAssistantPage'
 import ScanHistoryPage from '@/pages/ScanHistoryPage'
+import ScanDetailPage from '@/pages/ScanDetailPage'
+import NotificationCenterPage from '@/pages/NotificationCenterPage'
 import SettingsPage from '@/pages/SettingsPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
@@ -110,6 +112,18 @@ export const router = createBrowserRouter([
           {
             path: 'history',
             element: <ScanHistoryPage />,
+          },
+          {
+            path: 'history/:scanId',
+            element: <ScanDetailPage />,
+          },
+          {
+            path: 'scans/:scanId',
+            element: <ScanDetailPage />,
+          },
+          {
+            path: 'notifications',
+            element: <NotificationCenterPage />,
           },
           {
             path: 'settings',

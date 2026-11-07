@@ -5,6 +5,7 @@ import axios from 'axios'
 import { env } from '../config/env'
 import { CropRecommendation } from '../models/CropRecommendation'
 import { Activity } from '../models/Activity'
+import { NotificationService } from '../services/notificationService'
 import { OpenWeatherService } from '../services/weather/OpenWeatherService'
 import { User } from '../models/User'
 import logger from '../utils/logger'
@@ -263,7 +264,7 @@ export async function createCropRecommendation(
       dataSourceNote: aiResponse.data_source_note,
     })
 
-    // ── Activity log ─────────────────────────────────────────────────────────
+    // ── Activity log & notification ─────────────────────────────────────────
     await Activity.create({
       userId: new mongoose.Types.ObjectId(userId),
       type: 'crop_recommendation_generated',
@@ -275,6 +276,21 @@ export async function createCropRecommendation(
         recommendationId: record._id.toString(),
         topCrop: recommendations[0]?.cropName,
         language: data.language,
+      },
+    })
+
+    void NotificationService.createNotification({
+      userId,
+      type: 'farming_advisory',
+      title: 'Crop Recommendations Ready',
+      message: `Top recommended crop for your soil and climate: ${recommendations[0]?.cropName ?? 'Crops'} (${
+        ((recommendations[0]?.confidence ?? 0) * 100).toFixed(1)
+      }% suitability).`,
+      relatedResourceId: record._id.toString(),
+      resourceType: 'crop_recommendation',
+      metadata: {
+        recommendationId: record._id.toString(),
+        topCrop: recommendations[0]?.cropName,
       },
     })
 

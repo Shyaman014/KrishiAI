@@ -2,6 +2,7 @@ import axios from 'axios'
 import mongoose from 'mongoose'
 import { ICurrentWeather, IForecastResponse } from './OpenWeatherService'
 import { WeatherAlertHistory, WeatherAlertType, WeatherAlertSeverity } from '../../models/WeatherAlertHistory'
+import { NotificationService } from '../notificationService'
 import { env } from '../../config/env'
 import logger from '../../utils/logger'
 
@@ -274,7 +275,7 @@ export class WeatherAdvisoryEngine {
           })
 
           if (!existing) {
-            await WeatherAlertHistory.create({
+            const savedAlert = await WeatherAlertHistory.create({
               userId: new mongoose.Types.ObjectId(userId),
               alertType: alert.alertType,
               severity: alert.severity,
@@ -294,6 +295,20 @@ export class WeatherAdvisoryEngine {
               },
               dismissed: false,
               validUntil: new Date(alert.validUntil),
+            })
+
+            void NotificationService.createNotification({
+              userId,
+              type: 'weather_alert',
+              title: `Weather Alert: ${alert.title}`,
+              message: alert.message,
+              relatedResourceId: savedAlert._id.toString(),
+              resourceType: 'weather',
+              metadata: {
+                alertType: alert.alertType,
+                severity: alert.severity,
+                cityName: current.location.name,
+              },
             })
           }
         }

@@ -30,6 +30,7 @@ router.post('/:id/generate-explanation', generateExplanation)
 
 // History & retrieval endpoints
 router.get('/', getScans)
+router.get('/history', getScans)
 router.get('/:id', getScanById)
 router.delete('/:id', deleteScan)
 

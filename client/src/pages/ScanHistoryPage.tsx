@@ -8,9 +8,7 @@ import {
   ScanLine,
   Eye,
   Trash2,
-  Clock,
   Sprout,
-  CheckCircle2,
   RefreshCw,
   MapPin,
   Calendar,
@@ -86,8 +84,11 @@ export default function ScanHistoryPage() {
   const queryClient = useQueryClient()
 
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'failed' | 'inconclusive'>('all')
+  const [dateRange, setDateRange] = useState<'all' | 'today' | '7d' | '30d'>('all')
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
   const [selectedScan, setSelectedScan] = useState<ScanItem | null>(null)
+  const [scanToDelete, setScanToDelete] = useState<ScanItem | null>(null)
   const [page, setPage] = useState(1)
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false)
   const [showFullAdvisory, setShowFullAdvisory] = useState(false)
@@ -202,14 +203,22 @@ export default function ScanHistoryPage() {
     isLoading,
     refetch,
   } = useQuery<ScansResponse>({
-    queryKey: ['scans-history', page, statusFilter, searchTerm],
+    queryKey: ['scans-history', page, statusFilter, searchTerm, sortOrder, dateRange],
     queryFn: async () => {
-      let url = `/api/scans?page=${page}&limit=10`
+      let url = `/api/scans/history?page=${page}&limit=10&sort=${sortOrder}`
       if (statusFilter !== 'all') {
         url += `&status=${statusFilter}`
       }
       if (searchTerm.trim()) {
         url += `&search=${encodeURIComponent(searchTerm.trim())}`
+      }
+      if (dateRange !== 'all') {
+        const now = Date.now()
+        let fromMs = now
+        if (dateRange === 'today') fromMs -= 24 * 3600 * 1000
+        else if (dateRange === '7d') fromMs -= 7 * 24 * 3600 * 1000
+        else if (dateRange === '30d') fromMs -= 30 * 24 * 3600 * 1000
+        url += `&dateFrom=${new Date(fromMs).toISOString()}`
       }
       const res = await apiClient.get(url)
       return res.data.data
@@ -224,9 +233,10 @@ export default function ScanHistoryPage() {
     onSuccess: () => {
       toast.success('Scan record removed.')
       setSelectedScan(null)
-      queryClient.invalidateQueries({ queryKey: ['scans-history'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard-recent-scans'] })
+      setScanToDelete(null)
+      void queryClient.invalidateQueries({ queryKey: ['scans-history'] })
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] })
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-recent-scans'] })
     },
     onError: () => {
       toast.error('Failed to delete scan record.')
@@ -276,63 +286,98 @@ export default function ScanHistoryPage() {
       </div>
 
       {/* Search and Filters Toolbar */}
-      <Card className="shadow-subtle">
-        <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row gap-4 items-center justify-between">
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by crop, plot, disease..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value)
-                setPage(1)
-              }}
-              className="pl-9"
-            />
+      <Card className="shadow-subtle border-border">
+        <CardContent className="p-4 sm:p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by crop, field, disease..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setPage(1)
+                }}
+                className="pl-9"
+              />
+            </div>
+
+            {/* Sorting & Date Range */}
+            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+              <div className="flex items-center gap-1 bg-muted p-1 rounded-lg text-xs">
+                {(['newest', 'oldest'] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => {
+                      setSortOrder(s)
+                      setPage(1)
+                    }}
+                    className={`px-2.5 py-1 rounded-md capitalize transition-colors font-medium ${
+                      sortOrder === s
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {s === 'newest' ? 'Newest First' : 'Oldest First'}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-            <button
-              onClick={() => {
-                setStatusFilter('all')
-                setPage(1)
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-                statusFilter === 'all'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              All Records
-            </button>
-            <button
-              onClick={() => {
-                setStatusFilter('pending')
-                setPage(1)
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 ${
-                statusFilter === 'pending'
-                  ? 'bg-warning text-warning-foreground'
-                  : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Clock className="h-3 w-3" />
-              Pending Analysis
-            </button>
-            <button
-              onClick={() => {
-                setStatusFilter('completed')
-                setPage(1)
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 ${
-                statusFilter === 'completed'
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <CheckCircle2 className="h-3 w-3" />
-              Completed
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-border/60">
+            {/* Status Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+              <span className="text-xs text-muted-foreground font-medium mr-1">Status:</span>
+              {[
+                { id: 'all', label: 'All Scans' },
+                { id: 'completed', label: 'Completed' },
+                { id: 'inconclusive', label: 'Inconclusive' },
+                { id: 'pending', label: 'Pending' },
+                { id: 'failed', label: 'Failed' },
+              ].map((st) => (
+                <button
+                  key={st.id}
+                  onClick={() => {
+                    setStatusFilter(st.id as typeof statusFilter)
+                    setPage(1)
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors border ${
+                    statusFilter === st.id
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Date Range Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+              <span className="text-xs text-muted-foreground font-medium mr-1">Date:</span>
+              {[
+                { id: 'all', label: 'All Time' },
+                { id: 'today', label: 'Today' },
+                { id: '7d', label: '7 Days' },
+                { id: '30d', label: '30 Days' },
+              ].map((dr) => (
+                <button
+                  key={dr.id}
+                  onClick={() => {
+                    setDateRange(dr.id as typeof dateRange)
+                    setPage(1)
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors border ${
+                    dateRange === dr.id
+                      ? 'bg-primary/10 border-primary/30 text-primary font-semibold'
+                      : 'bg-card border-border text-muted-foreground hover:border-foreground/30'
+                  }`}
+                >
+                  {dr.label}
+                </button>
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -381,15 +426,42 @@ export default function ScanHistoryPage() {
                           </span>
                         )}
                         <Badge
-                          variant={scan.status === 'pending' ? 'warning' : 'outline'}
+                          variant={
+                            scan.status === 'completed'
+                              ? scan.confidence > 0 && scan.confidence < 0.6
+                                ? 'outline'
+                                : 'default'
+                              : scan.status === 'pending'
+                              ? 'warning'
+                              : 'destructive'
+                          }
                           size="sm"
                           className="capitalize"
                         >
-                          {scan.status === 'pending' ? 'Pending AI Analysis' : scan.status}
+                          {scan.status === 'completed'
+                            ? scan.confidence > 0 && scan.confidence < 0.6
+                              ? 'Inconclusive'
+                              : 'Completed'
+                            : scan.status === 'pending'
+                            ? 'Pending AI Analysis'
+                            : 'Analysis Failed'}
                         </Badge>
+                        {scan.status === 'completed' && (
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-full font-semibold border ${
+                              scan.confidence >= 0.8
+                                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                                : scan.confidence >= 0.6
+                                ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                                : 'bg-rose-500/10 text-rose-600 border-rose-500/30'
+                            }`}
+                          >
+                            {Math.round(scan.confidence * 100)}% Confidence
+                          </span>
+                        )}
                       </div>
 
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground font-medium">
                         {scan.diseaseName}
                       </p>
 
@@ -422,17 +494,21 @@ export default function ScanHistoryPage() {
                       onClick={() => handleSelectScan(scan)}
                       leftIcon={<Eye className="h-3.5 w-3.5" />}
                     >
-                      Details
+                      Quick Preview
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => navigate(`/app/history/${scan.id}`)}
+                      className="bg-primary text-primary-foreground hover:bg-primary/90"
+                    >
+                      View Report
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="text-destructive hover:bg-destructive/10"
-                      onClick={() => {
-                        if (window.confirm(`Delete scan record for ${scan.cropName}?`)) {
-                          deleteMutation.mutate(scan.id)
-                        }
-                      }}
+                      onClick={() => setScanToDelete(scan)}
+                      title="Delete scan"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -705,6 +781,46 @@ export default function ScanHistoryPage() {
           </DialogContent>
         </Dialog>
       )}
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={Boolean(scanToDelete)}
+        onOpenChange={(open) => {
+          if (!open) setScanToDelete(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Crop Scan Record?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove the scan for{' '}
+              <strong className="text-foreground">{scanToDelete?.cropName}</strong>? All associated
+              AI diagnostic logs will be deleted. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setScanToDelete(null)}
+              disabled={deleteMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (scanToDelete) {
+                  deleteMutation.mutate(scanToDelete.id)
+                }
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Confirm Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

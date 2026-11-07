@@ -21,7 +21,6 @@ import {
   User,
   ShieldCheck,
   Search,
-  CheckCircle2,
   AlertTriangle,
   PanelLeftClose,
   PanelLeft,
@@ -30,6 +29,7 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useApiHealth } from '@/hooks/useApiHealth'
+import { useNotifications, NotificationItem } from '@/hooks/useNotifications'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -58,6 +58,7 @@ const navItems: NavItem[] = [
   { title: 'Market Prices', to: '/app/market', icon: TrendingUp },
   { title: 'AI Assistant', to: '/app/assistant', icon: Bot, badge: 'Smart' },
   { title: 'Scan History', to: '/app/history', icon: History },
+  { title: 'Notifications', to: '/app/notifications', icon: Bell },
   { title: 'Settings', to: '/app/settings', icon: Settings },
 ]
 
@@ -65,7 +66,6 @@ export default function AppLayout() {
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false)
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false)
   const [showLogoutDialog, setShowLogoutDialog] = useState<boolean>(false)
-  const [unreadCount, setUnreadCount] = useState<number>(2)
 
   const { theme, toggleTheme, isDark } = useTheme()
   const { toast } = useToast()
@@ -73,6 +73,14 @@ export default function AppLayout() {
   const { data: health } = useApiHealth()
   const location = useLocation()
   const navigate = useNavigate()
+
+  // Real-time notifications
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+  } = useNotifications({ limit: 5 })
 
   const displayName = user?.fullName || 'Ramesh Patel'
   const displayEmail = user?.email || 'ramesh@krishiai.farm'
@@ -104,8 +112,42 @@ export default function AppLayout() {
   }
 
   const handleClearNotifications = () => {
-    setUnreadCount(0)
-    toast.info('Notifications marked as read')
+    markAllAsRead(undefined, {
+      onSuccess: () => {
+        toast.info('All notifications marked as read')
+      },
+    })
+  }
+
+  const handleNotificationClick = (n: NotificationItem) => {
+    if (!n.isRead) {
+      markAsRead(n.id)
+    }
+    if (n.resourceType === 'scan' && n.relatedResourceId) {
+      navigate(`/app/history/${n.relatedResourceId}`)
+    } else if (n.resourceType === 'market') {
+      navigate('/app/market')
+    } else if (n.resourceType === 'weather') {
+      navigate('/app/weather')
+    } else if (n.resourceType === 'crop_recommendation') {
+      navigate('/app/recommendations')
+    } else {
+      navigate('/app/notifications')
+    }
+  }
+
+  const formatNotifTime = (isoString: string) => {
+    try {
+      const diffMs = Date.now() - new Date(isoString).getTime()
+      const mins = Math.floor(diffMs / 60000)
+      if (mins < 1) return 'Just now'
+      if (mins < 60) return `${mins}m ago`
+      const hrs = Math.floor(diffMs / 3600000)
+      if (hrs < 24) return `${hrs}h ago`
+      return `${Math.floor(diffMs / 86400000)}d ago`
+    } catch {
+      return 'Recent'
+    }
   }
 
   return (
@@ -205,10 +247,15 @@ export default function AppLayout() {
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80 p-2">
+            <DropdownMenuContent align="end" className="w-80 sm:w-88 p-2">
               <div className="flex items-center justify-between px-2 py-1.5">
-                <DropdownMenuLabel className="p-0 text-sm font-semibold">
-                  Advisories & Alerts
+                <DropdownMenuLabel className="p-0 text-sm font-semibold flex items-center gap-1.5">
+                  Notifications
+                  {unreadCount > 0 && (
+                    <span className="h-4 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold inline-flex items-center justify-center">
+                      {unreadCount}
+                    </span>
+                  )}
                 </DropdownMenuLabel>
                 {unreadCount > 0 && (
                   <button
@@ -220,44 +267,67 @@ export default function AppLayout() {
                 )}
               </div>
               <DropdownMenuSeparator />
-              <div className="space-y-1 py-1">
-                <DropdownMenuItem className="flex items-start gap-3 p-2.5 cursor-pointer">
-                  <div className="h-8 w-8 rounded-lg bg-warning/15 text-warning flex items-center justify-center shrink-0 mt-0.5">
-                    <AlertTriangle className="h-4 w-4" />
+              <div className="space-y-1 py-1 max-h-72 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-muted-foreground">
+                    No notifications yet.
                   </div>
-                  <div className="flex-1 text-xs">
-                    <p className="font-medium text-foreground">Rainfall Warning</p>
-                    <p className="text-muted-foreground text-[11px] leading-snug">
-                      Heavy showers expected in 36h. Postpone fungicide spraying.
-                    </p>
-                    <span className="text-[10px] text-muted-foreground/75 mt-1 block">
-                      12 minutes ago
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-
-                <DropdownMenuItem className="flex items-start gap-3 p-2.5 cursor-pointer">
-                  <div className="h-8 w-8 rounded-lg bg-success/15 text-success flex items-center justify-center shrink-0 mt-0.5">
-                    <CheckCircle2 className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 text-xs">
-                    <p className="font-medium text-foreground">Scan Analysis Ready</p>
-                    <p className="text-muted-foreground text-[11px] leading-snug">
-                      Wheat Plot #3 scan completed: 96% Healthy leaf tissue.
-                    </p>
-                    <span className="text-[10px] text-muted-foreground/75 mt-1 block">
-                      2 hours ago
-                    </span>
-                  </div>
-                </DropdownMenuItem>
+                ) : (
+                  notifications.slice(0, 5).map((n) => (
+                    <DropdownMenuItem
+                      key={n.id}
+                      onClick={() => handleNotificationClick(n)}
+                      className={`flex items-start gap-3 p-2.5 cursor-pointer rounded-lg ${
+                        n.isRead ? 'opacity-80' : 'bg-primary/5 font-medium'
+                      }`}
+                    >
+                      <div
+                        className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                          n.type === 'scan_completed'
+                            ? 'bg-emerald-500/15 text-emerald-600'
+                            : n.type === 'scan_failed'
+                            ? 'bg-rose-500/15 text-rose-600'
+                            : n.type === 'weather_alert'
+                            ? 'bg-amber-500/15 text-amber-600'
+                            : n.type === 'price_target_reached'
+                            ? 'bg-indigo-500/15 text-indigo-600'
+                            : 'bg-primary/15 text-primary'
+                        }`}
+                      >
+                        {n.type === 'scan_completed' ? (
+                          <ScanLine className="h-3.5 w-3.5" />
+                        ) : n.type === 'scan_failed' ? (
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                        ) : n.type === 'weather_alert' ? (
+                          <CloudSun className="h-3.5 w-3.5" />
+                        ) : n.type === 'price_target_reached' ? (
+                          <TrendingUp className="h-3.5 w-3.5" />
+                        ) : (
+                          <Sprout className="h-3.5 w-3.5" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0 text-xs">
+                        <div className="flex items-center justify-between gap-1">
+                          <p className="font-semibold text-foreground truncate">{n.title}</p>
+                          <span className="text-[10px] text-muted-foreground shrink-0">
+                            {formatNotifTime(n.createdAt)}
+                          </span>
+                        </div>
+                        <p className="text-muted-foreground text-[11px] leading-snug line-clamp-2 mt-0.5">
+                          {n.message}
+                        </p>
+                      </div>
+                    </DropdownMenuItem>
+                  ))
+                )}
               </div>
               <DropdownMenuSeparator />
               <div className="p-1 text-center">
                 <Link
-                  to="/app/weather"
+                  to="/app/notifications"
                   className="text-xs font-medium text-primary hover:underline block py-1"
                 >
-                  View All Field Alerts
+                  Open Notification Center
                 </Link>
               </div>
             </DropdownMenuContent>

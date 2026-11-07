@@ -4,6 +4,7 @@ import axios from 'axios'
 import FormData from 'form-data'
 import { Scan } from '../models/Scan'
 import { Activity } from '../models/Activity'
+import { NotificationService } from '../services/notificationService'
 import { env } from '../config/env'
 import logger from '../utils/logger'
 
@@ -64,6 +65,15 @@ export const analyzeScan = async (
       scan.status = 'failed'
       scan.analysisError = 'Could not retrieve image for analysis. Please re-upload.'
       await scan.save()
+
+      void NotificationService.createNotification({
+        userId,
+        type: 'scan_failed',
+        title: `AI Analysis Failed: ${scan.cropName}`,
+        message: 'Could not retrieve scan photograph for analysis. Please re-upload.',
+        relatedResourceId: scan._id.toString(),
+        resourceType: 'scan',
+      })
       res.status(502).json({
         success: false,
         message: 'Failed to retrieve the scan image for AI analysis.',
@@ -127,7 +137,7 @@ export const analyzeScan = async (
     scan.analysisError = undefined
     await scan.save()
 
-    // 8. Record activity
+    // 8. Record activity & notification
     try {
       await Activity.create({
         userId: new mongoose.Types.ObjectId(userId),
@@ -143,8 +153,24 @@ export const analyzeScan = async (
           status: finalStatus,
         },
       })
+
+      void NotificationService.createNotification({
+        userId,
+        type: 'scan_completed',
+        title: `AI Analysis Complete: ${scan.cropName}`,
+        message: `${aiResult.disease} detected with ${aiResult.confidence.toFixed(1)}% confidence. Review diagnosis and agronomic care plan.`,
+        relatedResourceId: scan._id.toString(),
+        resourceType: 'scan',
+        metadata: {
+          scanId: scan._id.toString(),
+          cropName: scan.cropName,
+          disease: aiResult.disease,
+          confidence: aiResult.confidence,
+          isHealthy: aiResult.is_healthy,
+        },
+      })
     } catch (actErr) {
-      logger.error('Failed to create scan_completed activity', actErr)
+      logger.error('Failed to create scan_completed activity or notification', actErr)
     }
 
     logger.info(`Scan ${scanId} analyzed | ${aiResult.crop} | ${aiResult.disease} | ${aiResult.confidence}%`)
@@ -187,6 +213,15 @@ export const analyzeScan = async (
           analysisError: 'AI service error. Please retry.',
         },
       )
+
+      void NotificationService.createNotification({
+        userId,
+        type: 'scan_failed',
+        title: `AI Analysis Failed: Scan #${scanId.slice(-6)}`,
+        message: 'AI diagnosis encountered a processing error. Please try scanning again.',
+        relatedResourceId: scanId,
+        resourceType: 'scan',
+      })
     } catch (updateErr) {
       logger.error('Failed to update scan status to failed', updateErr)
     }

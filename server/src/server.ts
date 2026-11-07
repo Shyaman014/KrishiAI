@@ -1,15 +1,21 @@
+import http from 'http'
 import { createApp } from './app'
 import { connectDB } from './config/db'
 import { connectRedis } from './config/redis'
 import { env } from './config/env'
+import { initSocketService } from './services/socketService'
 import logger from './utils/logger'
 
 async function bootstrap(): Promise<void> {
   await Promise.allSettled([connectDB(), connectRedis()])
 
   const app = createApp()
+  const server = http.createServer(app)
 
-  const server = app.listen(env.PORT, () => {
+  // Initialize real-time Socket.IO service
+  initSocketService(server)
+
+  server.listen(env.PORT, () => {
     logger.info(`🚀 KrishiAI server running on http://localhost:${env.PORT}`)
     logger.info(`   Environment: ${env.NODE_ENV}`)
     logger.info(`   Health: http://localhost:${env.PORT}/api/health`)

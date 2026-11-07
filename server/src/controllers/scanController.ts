@@ -139,15 +139,41 @@ export const getScans = async (
     const search = req.query.search as string | undefined
     const status = req.query.status as string | undefined
     const severity = req.query.severity as string | undefined
+    const sort = req.query.sort as string | undefined
+    const dateFrom = req.query.dateFrom as string | undefined
+    const dateTo = req.query.dateTo as string | undefined
 
     const filter: Record<string, unknown> = { userId }
 
-    if (status && ['pending', 'completed', 'failed'].includes(status)) {
-      filter.status = status
+    if (status) {
+      if (status === 'inconclusive') {
+        filter.status = 'completed'
+        filter.confidence = { $gt: 0, $lt: 0.6 }
+      } else if (['pending', 'completed', 'failed'].includes(status)) {
+        filter.status = status
+      }
     }
 
     if (severity && ['healthy', 'moderate', 'high'].includes(severity)) {
       filter.severity = severity
+    }
+
+    if (dateFrom || dateTo) {
+      const dateFilter: Record<string, Date> = {}
+      if (dateFrom) {
+        const dFrom = new Date(dateFrom)
+        if (!isNaN(dFrom.getTime())) dateFilter.$gte = dFrom
+      }
+      if (dateTo) {
+        const dTo = new Date(dateTo)
+        if (!isNaN(dTo.getTime())) {
+          dTo.setHours(23, 59, 59, 999)
+          dateFilter.$lte = dTo
+        }
+      }
+      if (Object.keys(dateFilter).length > 0) {
+        filter.createdAt = dateFilter
+      }
     }
 
     if (search && search.trim().length > 0) {
@@ -159,9 +185,12 @@ export const getScans = async (
       ]
     }
 
+    const sortOrder: Record<string, 1 | -1> =
+      sort === 'oldest' || sort === 'createdAt_asc' ? { createdAt: 1 } : { createdAt: -1 }
+
     const [scans, total] = await Promise.all([
       Scan.find(filter)
-        .sort({ createdAt: -1 })
+        .sort(sortOrder)
         .skip(skip)
         .limit(limit)
         .lean(),
